@@ -26,7 +26,7 @@ function UARTDev() {
 
 function moxieGUI(termid)
 {
-   this.term = new Terminal(25, 80, termid);
+   this.term = new Terminal(24, 80, termid);
    this.uart = new UARTDev();
    this.terminput = new TerminalInput(this.uart);
 

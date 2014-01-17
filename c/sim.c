@@ -70,7 +70,7 @@ term_read(int peek)
   if (val == 0) val = -1;
 
   if (val != -1 && !peek) {
-    printf("RX: %d\n", val);
+    //printf("RX: %d\n", val);
   }
 
   return val;
@@ -84,7 +84,7 @@ term_write(int c)
        ::"r"(c));
 #endif
   EM_ASM_INT({moxie_gui.term.PutChar($0)}, c);
-  printf("TX: %d\n", c);
+  //printf("TX: %d\n", c);
 }
 
 #endif
@@ -1029,11 +1029,11 @@ int main(int ac, char *av[])
     //EM_ASM(term = new Terminal(24, 80, 'tty'););
     EM_ASM(moxie_gui = new moxieGUI('tty'););
 
-  printf("Copying app data to sim ram\n");
+    //printf("Copying app data to sim ram\n");
   
   memcpy(mem, moxie_binary_data, sizeof(moxie_binary_data));
 
-  printf("Starting emscripten loop\n");
+  //printf("Starting emscripten loop\n");
 
   emscripten_set_main_loop(one_iter, 1000/50, 0);
 #endif
