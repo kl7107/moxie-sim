@@ -36,6 +36,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #include <inttypes.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <string.h>
 
 #ifndef EMSCRIPTEN
 
@@ -46,9 +47,45 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #else
 
+#include <emscripten.h>
+
+#include "app.h"
+
 // Console output to a Javascript VT100 emulator in the browser window
-#define SIM_TERM_GETC(peek) (-1)
-#define SIM_TERM_PUTC(c) printf("TERM char = %d\n", c);
+#define SIM_TERM_GETC(peek) term_read(peek)
+#define SIM_TERM_PUTC(c) term_write(c) //printf("TERM char = %d\n", c);
+
+int
+term_read(int peek)
+{
+  int val;
+
+
+  val = EM_ASM_INT({x = moxie_gui.uart.ReadChar(); return x;}, 0);
+
+  if (!peek && val) {
+    EM_ASM({moxie_gui.uart.ClearChar();});
+  }
+
+  if (val == 0) val = -1;
+
+  if (val != -1 && !peek) {
+    printf("RX: %d\n", val);
+  }
+
+  return val;
+}
+
+void
+term_write(int c)
+{
+#if 0
+  EM_ASM_INT(term.write($0);
+       ::"r"(c));
+#endif
+  EM_ASM_INT({moxie_gui.term.PutChar($0)}, c);
+  printf("TX: %d\n", c);
+}
 
 #endif
 
@@ -208,7 +245,7 @@ rlat (word pc, word x)
 static int tracing = 0;
 
 void
-sim_resume (int step)
+sim_resume (int step, int maxinsns)
 {
   word pc, opc;
   unsigned long long insts;
@@ -936,13 +973,20 @@ sim_resume (int step)
       insts++;
       pc += 2;
 
-    } while (!cpu.exception);
+    } while (!cpu.exception && 
+	     (!maxinsns || ((insts - cpu.insts) < maxinsns)));
 
   /* Hide away the things we've cached while executing.  */
   cpu.regs[PC_REGNO] = pc;
   cpu.insts += insts;		/* instructions done ... */
 
   signal (SIGINT, sigsave);
+}
+
+static void
+one_iter(void)
+{
+  sim_resume(0, 25000);
 }
 
 
@@ -955,6 +999,7 @@ int main(int ac, char *av[])
   
   cpu.regs[PC_REGNO] = 0x30000000;
 
+#ifndef EMSCRIPTEN
   fd = open(av[1], O_RDONLY);
   
   printf("fd = %d\n", fd);
@@ -963,7 +1008,35 @@ int main(int ac, char *av[])
 
   printf("Read %d bytes from '%s'\n", val, av[1]);
 
-  sim_resume(0);
+  sim_resume(0, 0);
+#else
+  
+#if 0
+    EM_ASM(
+        term = new Terminal({
+            termDiv: 'termDiv',
+            handler: function() {},
+            x: 0, y: 0,
+            initHandler: function() {
+                term.charMode = true;
+                term.lock = false;
+                term.cursorOn();
+            }
+        });
+        term.open();
+    );
+#endif
+    //EM_ASM(term = new Terminal(24, 80, 'tty'););
+    EM_ASM(moxie_gui = new moxieGUI('tty'););
+
+  printf("Copying app data to sim ram\n");
+  
+  memcpy(mem, moxie_binary_data, sizeof(moxie_binary_data));
+
+  printf("Starting emscripten loop\n");
+
+  emscripten_set_main_loop(one_iter, 1000/50, 0);
+#endif
 
   return 0;
 }
@@ -978,7 +1051,7 @@ sim_trace (void)
 
   tracing = 1;
   
-  sim_resume (0);
+  sim_resume (0, 0);
 
   tracing = 0;
   
